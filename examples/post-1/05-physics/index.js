@@ -5,7 +5,7 @@
  */
 
 const config = {
-  type: Phaser.AUTO,
+  type: Phaser.Physics.ARCADE,
   width: 800,
   height: 600,
   parent: "game-container",
@@ -27,11 +27,23 @@ const game = new Phaser.Game(config);
 let cursors;
 let player;
 let showDebug = false;
+let spaceKey;
+let textDown;
+let textUp;
+let lookingTo = "down";
+let map;
+let worldLayer;
+let puerta;
+let telefono;
+let armario;
+let espejo;
+let decoracion;
+let escalera;
 
 function preload() {
   this.load.image("tiles", "../assets/tilesets/tuxmon-sample-32px-extruded.png");
   this.load.tilemapTiledJSON("map", "../assets/tilemaps/tuxemon-town.json");
-
+  this.load.image('deLaRua', '../assets/images/portada.png');
   // An atlas is a way to pack multiple images together into one texture. I'm using it to load all
   // the player animations (walking left, walking right, etc.) in one image. For more info see:
   //  https://labs.phaser.io/view.html?src=src/animation/texture%20atlas%20animation.js
@@ -40,8 +52,15 @@ function preload() {
   this.load.atlas("atlas", "../assets/atlas/atlas.png", "../assets/atlas/atlas.json");
 }
 
+let items = {
+  telefono: false,
+  espejo: false,
+  escalera: false,
+  puerta: false,
+};
+let colision = false;
 function create() {
-  const map = this.make.tilemap({ key: "map" });
+  map = this.make.tilemap({ key: "map" });
 
   // Parameters are the name you gave the tileset in Tiled and then the key of the tileset image in
   // Phaser's cache (i.e. the name you used in preload)
@@ -49,10 +68,21 @@ function create() {
 
   // Parameters: layer name (or index) from Tiled, tileset, x, y
   const belowLayer = map.createStaticLayer("Below Player", tileset, 0, 0);
-  const worldLayer = map.createStaticLayer("World", tileset, 0, 0);
+  worldLayer = map.createStaticLayer("World", tileset, 0, 0);
+  telefono = map.createStaticLayer("Telefono", tileset, 0, 0);
+  puerta = map.createStaticLayer("Puerta", tileset, 0, 0);
+  armario = map.createStaticLayer("Armario", tileset, 0, 0);
+  espejo = map.createStaticLayer("Espejo", tileset, 0, 0);
+  decoracion = map.createStaticLayer("Decoracion", tileset, 0, 0);
+  escalera = map.createStaticLayer("Escalera", tileset, 0, 0);
   const aboveLayer = map.createStaticLayer("Above Player", tileset, 0, 0);
 
   worldLayer.setCollisionByProperty({ collides: true });
+  telefono.setCollisionByProperty({ collides: true });
+  espejo.setCollisionByProperty({ collides: true });
+  puerta.setCollisionByProperty({ collides: true });
+  escalera.setCollisionByProperty({ collides: true });
+
 
   // By default, everything gets depth sorted on the screen in the order we created things. Here, we
   // want the "Above Player" layer to sit on top of the player, so we explicitly give it a depth.
@@ -64,14 +94,59 @@ function create() {
   const spawnPoint = map.findObject("Objects", obj => obj.name === "Spawn Point");
 
   // Create a sprite with physics enabled via the physics system. The image used for the sprite has
-  // a bit of whitespace, so I'm using setSize & setOffset to control the size of the player's body.
+  // a bit of whitespace, so I'm rtsing setSize & setOffset to control the size of the player's body.
   player = this.physics.add
     .sprite(spawnPoint.x, spawnPoint.y, "atlas", "misa-front")
     .setSize(30, 40)
     .setOffset(0, 24);
 
+  // player.scene.events.onInputDown.add(listener, this);
+
   // Watch the player and worldLayer for collisions, for the duration of the scene:
   this.physics.add.collider(player, worldLayer);
+  this.physics.add.collider(player, telefono, () => {
+    if (items.telefono == false && items.espejo == true) {
+      colision = true;
+      textDown = "Supermingo (Cavallo):Chupete? la cagamos. CORRÉ ";
+      items.telefono = true;
+      textUp = "Corré a la salida!!!                                 " 
+    }
+  });
+
+  this.physics.add.collider(player, espejo, () => {
+    if (items.espejo == false) {
+      colision = true;
+      textDown = "y dicen que soy aburrido... jaja fachero ";
+      items.espejo = true;
+      textUp = "'Ring Ring... suena el teléfono" 
+      
+    }
+  });
+
+
+  // Puerta
+  this.physics.add.collider(player, puerta, () => {
+    if (items.telefono == true && items.espejo == true && items.puerta == false) {
+      colision = true;
+      textDown = "Seguridad: Señor presidente esto sale al jardín ";
+      items.puerta = true;
+      textUp = "Busca como subir al helicoptero!                       " 
+    }
+  });
+
+
+
+  // Escalera
+  this.physics.add.collider(player, escalera, () => {
+    if (items.telefono == true && items.espejo == true && items.escalera == false) {
+      colision = true;
+      textDown = "Batmannnnnnnn";
+      items.escalera = true;
+      //extUp = "Pudiste salir volando, Shakira te salvo las papas    " 
+      this.add.sprite(380, 300, 'deLaRua');
+
+    }
+  });
 
   // Create the player's walking animations from the texture atlas. These are stored in the global
   // animation manager so any sprite can access them.
@@ -128,15 +203,8 @@ function create() {
   cursors = this.input.keyboard.createCursorKeys();
 
   // Help text that has a "fixed" position on the screen
-  this.add
-    .text(16, 16, 'Arrow keys to move\nPress "D" to show hitboxes', {
-      font: "18px monospace",
-      fill: "#000000",
-      padding: { x: 20, y: 10 },
-      backgroundColor: "#ffffff"
-    })
-    .setScrollFactor(0)
-    .setDepth(30);
+  // showTextUp("'Ring Ring... suena el teléfono", this)
+  showTextUp("Es muy temprano. Me gustaría verme reflejado.", this)
 
   // Debug graphics
   this.input.keyboard.once("keydown_D", event => {
@@ -154,26 +222,94 @@ function create() {
       faceColor: new Phaser.Display.Color(40, 39, 37, 255) // Color of colliding face edges
     });
   });
+
+  spaceKey = this.input.keyboard.addKey("SPACE");
+}
+
+function showTextUp(data, _this) {
+  let text = _this.add
+    .text(250, 16, data, {
+      font: "18px monospace",
+      fill: "#000000",
+      padding: { x: 20, y: 10 },
+      backgroundColor: "#ffffff"
+    })
+    .setScrollFactor(0)
+    .setDepth(30);
+
+  // setTimeout(() => {
+  // setTimeout(() => {
+  //   text.destroy();
+  // }, 2000);
+}
+
+function showTextDown(data, _this) {
+  let text = _this.add
+    .text(250, 500, data, {
+      font: "18px monospace",
+      fill: "#000000",
+      padding: { x: 20, y: 10 },
+      backgroundColor: "#ffffff"
+    })
+    .setScrollFactor(0)
+    .setDepth(30);
+
+  // setTimeout(() => {
+  setTimeout(() => {
+    text.destroy();
+  }, 3000);
 }
 
 function update(time, delta) {
   const speed = 175;
   const prevVelocity = player.body.velocity.clone();
 
+  this.input.keyboard.on("keydown", function(event) {
+    if (event.keyCode != 32) {
+      colision = false;
+    }
+  });
+
+  if (spaceKey.isDown) {
+    switch (lookingTo) {
+      case "left":
+        break;
+      case "right":
+        break;
+      case "up":
+        break;
+      case "down":
+        break;
+    }
+
+    if (colision == true) {
+      //TODO: VER PARA PASAR UN ARRAY DE TEXTOS
+      showTextDown(textDown, this);
+      setTimeout(()=>{
+        showTextUp(textUp, this);
+      }, 1000)
+      colision = false;
+    }
+  }
+
   // Stop any previous movement from the last frame
   player.body.setVelocity(0);
 
   // Horizontal movement
   if (cursors.left.isDown) {
+    lookingTo = "left";
     player.body.setVelocityX(-speed);
   } else if (cursors.right.isDown) {
+    lookingTo = "right";
     player.body.setVelocityX(speed);
   }
 
   // Vertical movement
   if (cursors.up.isDown) {
+    lookingTo = "down";
     player.body.setVelocityY(-speed);
   } else if (cursors.down.isDown) {
+    lookingTo = "up";
     player.body.setVelocityY(speed);
   }
 
